@@ -1,0 +1,210 @@
+---
+title: "Stat 3333 Final Project"
+author: "Elizabeth Flores, Yohari Hernandez, Regis Ouedraogo, Richard Sauve"
+date: '2022-12-12'
+output:
+  word_document: default
+  pdf_document: default
+subtitle: An Analysis of Excess Death in Early Covid-19 Pandemic
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Libraries
+library(tidyverse)
+```
+
+```{r}
+# Importing data
+set.seed(2022)
+deaths <- read.csv('Excess_Deaths_Associated_with_COVID-19.csv', header=TRUE)
+colnames(deaths)[1] <- 'Week.Ending.Date'
+deaths$Week.Ending.Date <- as.Date(deaths$Week.Ending.Date)
+deaths <- deaths %>% na.omit()
+
+# Data is total excess deaths per week from 2017-01-01-2020-06-30
+deaths %>% group_by(Week.Ending.Date) %>% summarise(total = round(mean(Observed.Number))) -> total_deaths
+
+year2018 <- total_deaths %>% filter(Week.Ending.Date <= '2018-06-30' & Week.Ending.Date >= '2018-01-01') %>% mutate(Year = 2018)
+year2019 <- total_deaths %>% filter(Week.Ending.Date <= '2019-06-30' & Week.Ending.Date >= '2019-01-01') %>% mutate(Year = 2019)
+year2020 <- total_deaths %>% filter(Week.Ending.Date >= '2020-01-01' & Week.Ending.Date <= '2020-06-30') %>% mutate(Year = 2020)
+
+anova <- bind_rows(year2018, year2019, year2020)
+```
+
+**Data Breakdown**
+
+```{r, fig.width=20, fig.height=10}
+# Looking into data
+par(mfrow = c(2, 2))
+plot(y = year2018$total, xlab = 'Date', ylab = 'Excess Deaths',x = year2018$Week.Ending.Date, type = 'l', ylim = c(1600, 2700), main = 'Excess deaths 2018 Jan-Jul', lwd = 5)
+plot(y = year2019$total, xlab = 'Date', ylab = 'Excess Deaths',x = year2019$Week.Ending.Date, type = 'l', ylim = c(1600, 2700), main = 'Excess deaths 2019 Jan-Jul', lwd = 5)
+plot(y = year2020$total, xlab = 'Date', ylab = 'Excess Deaths',x = year2020$Week.Ending.Date, type = 'l', ylim = c(1600, 2700), main = 'Excess deaths 2020 Jan-Jul', lwd = 5)
+```
+
+```{r, fig.width=15, fig.height=10}
+par(mfrow = c(3, 2))
+hist(year2018$total, main = "2018 Excess Deaths", xlab="Excess Deaths", ylab="Frequency", xlim = c(1800, 2800), breaks = 8)
+qqnorm(year2018$total, main = "Q-Q Plot of 2018")
+qqline(year2018$total)
+
+hist(year2019$total, main = "2019 Excess Deaths", xlab="Excess Deaths", ylab="Frequency", xlim = c(1800, 2800), breaks = 5 )
+qqnorm(year2019$total, main = "Q-Q Plot of 2019")
+qqline(year2019$total)
+
+hist(year2020$total, main = "2020 Excess Deaths", xlab="Excess Deaths", ylab="Frequency", xlim = c(1800, 2800), breaks = 10)
+qqnorm(year2020$total, main = "Q-Q Plot of 2020")
+qqline(year2020$total)
+```
+
+**Bootstrapping**
+```{r, fig.width=30, fig.height=12}
+set.seed(2022)
+deaths <- read.csv('Excess_Deaths_Associated_with_COVID-19.csv', header=TRUE, stringsAsFactors = FALSE)
+options(max.print=999999)
+
+
+n2018 <- length(year2018$total)
+
+N <- 10^4
+samp2018 <- 1:N
+samp2019 <- 1:N
+samp2020 <- 1:N
+for (i in 1:N)
+{
+  samp2018[i] <- mean(sample(year2018$total, n2018, replace = TRUE))
+  samp2019[i] <- mean(sample(year2019$total, n2018, replace = TRUE))
+  samp2020[i] <- mean(sample(year2020$total, n2018, replace = TRUE))
+}
+
+par(mfrow = c(1, 3))
+hist(samp2018, main = "2018 Bootstrap distribution", xlab="Bootstrap Mean 2018") 
+abline(v = mean(year2018$total) , col = "blue", lty = 2)
+
+hist(samp2019, main = "2019 Bootstrap distribution", xlab="Bootstrap Mean 2019") 
+abline(v = mean(year2019$total) , col = "blue", lty = 2)
+
+hist(samp2020, main = "2020 Bootstrap distribution", xlab="Bootstrap Mean 2020") 
+abline(v = mean(year2020$total) , col = "blue", lty = 2)
+```
+```{r}
+# 90% CI for mean of 2018
+quantile(samp2018, c(0.025, 0.975))
+
+# 90% CI for mean of 2019
+quantile(samp2019, c(0.025, 0.975))
+
+# 90% CI for mean of 2020
+quantile(samp2020, c(0.025, 0.975))
+```
+
+```{r}
+# Difference in means t-test, unequal variance
+# Ho: mu.diff = 0
+# Ha: mu.diff <> 0
+t.test(year2019$total, year2020$total, var.equal = FALSE)
+
+```
+
+
+```{r}
+# boxplot plot to show variance
+par(mfrow = c(1, 3))
+boxplot(year2018$total, ylim = c(1900, 2500), main = '2018')
+boxplot(year2019$total, ylim = c(1900, 2500), main = '2019')
+boxplot(year2020$total, ylim = c(1900, 2500), main = '2020')
+```
+
+```{r}
+# F-test
+# 2020-2019
+var(year2020$total) / var(year2019$total)
+# 2019-2018
+var(year2018$total) / var(year2019$total)
+# value > 4 assume unequal variance
+```
+
+**Hypothesis Testing**
+
+```{r}
+# ANOVA
+summary(aov(total ~ Year, data = anova))
+
+aov_model <- aov(total ~ as.character(Year), data = anova)
+
+plot(TukeyHSD(aov_model))
+```
+
+```{r}
+TukeyHSD(aov_model)
+```
+
+
+
+```{r}
+# Permutation
+
+# Ho: cor = 0
+# Ha: cor <> 0
+# comparing 2019 and 2018
+N <- 10^4
+n <- length(year2019$total) # number of observations
+result1 <- 1:N
+observed1 <- cor(year2018$total, year2019$total)
+for (i in 1:N)
+{
+index <- sample(n, replace=FALSE)
+Short.permuted <- year2018$total[index]
+result1[i] <- cor(Short.permuted, year2019$total)
+}
+```
+
+```{r}
+# Ho: cor = 0
+# Ha: cor <> 0
+# Correlation Test using Permutation
+
+N <- 10^4
+n <- length(year2019$total) # number of observations
+result2 <- 1:N
+observed2 <- cor(year2019$total, year2020$total)
+for (i in 1:N)
+{
+index <- sample(n, replace=FALSE)
+Short.permuted <- year2020$total[index]
+result2[i] <- cor(Short.permuted, year2019$total)
+}
+```
+
+```{r, fig.width=15, fig.height=7}
+par(mfrow = c(1, 2))
+hist(result1, main = 'Correlation 2018-2019', xlim = c(-0.7, 1), xlab = 'Correlations')
+abline(v = observed1, col = 'red', lwd = 5,lty = 2)
+
+2*(sum(observed1 <= result) + 1) / (N + 1)
+
+hist(result2, main = 'Correlation 2019-220', xlab = 'Correlations')
+abline(v = observed2, col = 'red', lty = 2, lwd = 5)
+
+2*(sum(observed2 <= result) + 1) / (N + 1)
+```
+
+
+```{r}
+# Regression
+model.lm <-lm(year2019$total ~ year2018$total)
+model.lm.summary<-summary(model.lm)
+model.lm.summary
+```
+
+```{r}
+model.lm <-lm(year2020$total~year2019$total)
+model.lm.summary<-summary(model.lm)
+model.lm.summary
+```
+
+
+
